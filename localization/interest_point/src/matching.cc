@@ -17,6 +17,7 @@
  */
 
 #include <interest_point/matching.h>
+#include <interest_point/brisk.h>
 #include <opencv2/xfeatures2d.hpp>
 
 #include <Eigen/Core>
@@ -65,13 +66,15 @@ namespace interest_point {
 
   class BriskDynamicDetector : public DynamicDetector {
    public:
-    BriskDynamicDetector(unsigned int min_features, unsigned int max_features, unsigned int max_retries, int threshold)
-         : DynamicDetector(min_features, max_features, max_retries), threshold_(threshold) {
+    BriskDynamicDetector(unsigned int min_features, unsigned int max_features,
+                         unsigned int max_retries)
+         : DynamicDetector(min_features, max_features, max_retries), threshold_(100) {
       Reset();
     }
 
     void Reset(void) {
-      brisk_ = cv::BRISK::create(threshold_, FLAGS_orgbrisk_octaves, FLAGS_orgbrisk_pattern_scale);
+      brisk_ = interest_point::BRISK::create(threshold_, FLAGS_orgbrisk_octaves,
+                                 FLAGS_orgbrisk_pattern_scale);
     }
 
     virtual void DetectImpl(const cv::Mat& image, std::vector<cv::KeyPoint>* keypoints) {
@@ -82,21 +85,21 @@ namespace interest_point {
       brisk_->compute(image, *keypoints, *keypoints_description);
     }
     virtual void TooMany(void) {
-      threshold_ *= 1.3;
+      threshold_ *= 1.25;
       if (threshold_ > 200)
         threshold_ = 200;
-      Reset();
+      brisk_->setThreshold(threshold_);
     }
     virtual void TooFew(void) {
-      threshold_ *= 0.6;
-      if (threshold_ < 5)
-        threshold_ = 5;
-      Reset();
+      threshold_ *= 0.8;
+      if (threshold_ < 80)
+        threshold_ = 80;
+      brisk_->setThreshold(threshold_);
     }
 
    private:
-    cv::Ptr<cv::BRISK> brisk_;
-    int threshold_;
+    cv::Ptr<interest_point::BRISK> brisk_;
+    unsigned int threshold_;
   };
 
   class SurfDynamicDetector : public DynamicDetector {
@@ -131,37 +134,45 @@ namespace interest_point {
 
   FeatureDetector::FeatureDetector(std::string const& detector_name,
                                    int min_features, int max_features,
-                                   int brisk_threshold, int retries) {
+                                   int retries) {
     detector_ = NULL;
-    Reset(detector_name, min_features, max_features, brisk_threshold, retries);
+    Reset(detector_name, min_features, max_features, retries);
   }
 
   FeatureDetector::~FeatureDetector(void) {
-    if (detector_)
+    if (detector_ != NULL) {
       delete detector_;
+      detector_ = NULL;
+    }
   }
 
   void FeatureDetector::Reset(std::string const& detector_name,
                               int min_features, int max_features,
-                              int brisk_threshold, int retries) {
-    detector_name_ = detector_name;
+                              int retries) {
+    detector_name_   = detector_name;
 
-    if (detector_)
+    if (detector_ != NULL) {
       delete detector_;
+      detector_ = NULL;
+    }
+
     // Loading the detector
     if (detector_name == "ORGBRISK") {
-      detector_ = new BriskDynamicDetector(min_features, max_features, retries, brisk_threshold);
+      detector_ = new BriskDynamicDetector(min_features, max_features,
+                                           retries);
     } else if (detector_name == "SURF") {
       detector_ = new SurfDynamicDetector(min_features, max_features, retries, 10.0);
     } else {
-      LOG(ERROR) << "Unimplemented feature detector " << detector_name;
-      assert(false);
+      LOG(FATAL) << "Unimplemented feature detector " << detector_name;
     }
   }
 
   void FeatureDetector::Detect(const cv::Mat& image,
-                                   std::vector<cv::KeyPoint>* keypoints,
-                                   cv::Mat* keypoints_description) {
+                               std::vector<cv::KeyPoint>* keypoints,
+                               cv::Mat* keypoints_description) {
+    if (detector_ == NULL)
+      LOG(FATAL) << "The detector was not initialized.";
+
     detector_->Detect(image, keypoints, keypoints_description);
 
     // Normalize the image points relative to the center of the image

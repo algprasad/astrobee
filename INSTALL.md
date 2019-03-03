@@ -7,8 +7,11 @@ support some of our Gazebo plugins.
 
     sudo apt-get install build-essential git
 
-*Note: You will need 3 GBs of RAM to compile the software. If you don't have
+*Note: You will need 4 GBs of RAM to compile the software. If you don't have
 that much RAM available, please use swap space.*
+
+*Note: Please ensure you install Ubuntu 16.04. At this time we do not support
+any other operating system or Ubuntu version.*
 
 *Note: Please ensure you install the 64-bit version of Ubuntu. We do not
 support running Astrobee Robot Software on 32-bit systems.*
@@ -49,6 +52,7 @@ Next, install all required dependencies:
     pushd $SOURCE_PATH
     cd scripts/setup
     ./add_ros_repository.sh
+    sudo apt-get update
     cd debians
     ./build_install_debians.sh
     cd ../
@@ -56,6 +60,20 @@ Next, install all required dependencies:
     sudo rosdep init
     rosdep update
     popd
+
+**Important**: you can safely ignore the following error messages, as they are simply letting you know that certain libraries cannot be found. These libraries are for internal NASA use only, and are not required by public users provided that software is launched with DDS disabled.
+
+    E: Unable to locate package libroyale1
+    E: Unable to locate package rti
+    E: Unable to locate package libmiro0
+    E: Unable to locate package libsoracore1
+    E: Unable to locate package libroyale-dev
+    E: Unable to locate package rti-dev
+    E: Unable to locate package libsoracore-dev
+    E: Unable to locate package libmiro-dev
+
+### Have System Monitor Ignore DDS ROS Bridge
+Since external users do not have access to our internal dds repository, they will not be running or compiling our DDS ROS Bridge. The system monitor needs to be told that the bridge isn't running so that it doesn't assert bridge heartbeat missed faults. In order to do this, please open $SOURCE_PATH/astrobee/config/robots/sim.config and add "dds_ros_bridge" to the nodes_not_running list the end of the file. If an external user doesn't do this, they will see a "Never received heartbeat from dds_ros_bridge" error which will not cause any issues but can be slightly annoying.
 
 ## Configuring the build
 
@@ -67,7 +85,10 @@ By default, the configure script uses the following paths:
 If you are satisfied with these paths, you can invoke the `configure.sh` without
 the `-p` and `-b` options. For the simplicity of the instructions below,
 we assume that `$BUILD_PATH` and `$INSTALL_PATH` contain the location of the
-build and install path.
+build and install path. For example:
+
+    export BUILD_PATH=$HOME/freeflyer_build/native
+    export INSTALL_PATH=$HOME/freeflyer_install/native
 
 ### Native build
 
@@ -100,8 +121,11 @@ time round. Future builds will be faster, as only changes to the code are
 rebuilt, and not the entire code base.
 
     pushd $BUILD_PATH
-    make -j6
+    make -j2
     popd
+
+If you configured your virtual machine with more than the baseline resources,
+you can adjust the number of threads (eg. -j4) to speed up the build.
 
 ## Running a simulation
 
